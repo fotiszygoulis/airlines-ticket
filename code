@@ -1,0 +1,281 @@
+$ mkdir tickets
+$ cd tickets
+$ pipenv --python=$(which python3.7) install flask
+$ pipenv shell
+(tickets) $
+(tickets) $ export FLASK_ENV=development
+(tickets) $ export FLASK_APP='.'
+(tickets) $ flask run --host=0.0.0.0 --port=3000
+* Serving Flask app "." (lazy loading)
+* Environment: development
+* Debug mode: on
+* Running on http://0.0.0.0:3000/ (Press CTRL+C to quit)
+* Restarting with stat
+* Debugger is active!
+* Debugger PIN: 112-739-965
+(tickets) $ pipenv install psycopg2 Flask-SQLAlchemy
+Installing psycopg2…
+Adding psycopg2 to Pipfile's [packages]…
+✔ Installation Succeeded
+Installing Flask-SQLAlchemy…
+Adding Flask-SQLAlchemy to Pipfile's [packages]…
+✔ Installation Succeeded
+Pipfile.lock (caf66b) out of date, updating to (662286)…
+Locking [dev-packages] dependencies…
+Locking [packages] dependencies…
+✔ Success!
+Updated Pipfile.lock (caf66b)!
+Installing dependencies from Pipfile.lock (caf66b)…
+import os
+
+db_host = os.environ.get('DB_HOST', default='< DB_PRIVATE_IP >')
+db_name = os.environ.get('DB_NAME', default='dashboard')
+db_password = os.environ.get('DB_PASSWORD', default='secure_password')
+db_port = os.environ.get('DB_PORT', default='5432')
+db_user = os.environ.get('DB_USERNAME', default='dashboard')
+
+SQLALCHEMY_DATABASE_URI = f"postgresql://{db_user}:{db_password}@{db_host}:{db_port}/{db_name}"
+from flask_sqlalchemy import SQLAlchemy
+
+db = SQLAlchemy()
+
+class Ticket(db.Model):
+id = db.Column(db.Integer, primary_key=True)
+name = db.Column(db.String(100), nullable=False)
+status = db.Column(db.Integer, nullable=False)
+url = db.Column(db.String(100), nullable=True)
+
+statuses_dict = {
+0: 'Reported',
+1: 'In Progress',
+2: 'In Review',
+3: 'Resolved',
+}
+
+def status_string(self):
+return self.statuses_dict[self.status]
+import os
+
+from flask import Flask
+
+def create_app(test_config=None):
+app = Flask(__name__)
+app.config.from_mapping(
+SECRET_KEY=(os.getenv('SECRET_KEY') or 'dev'),
+)
+
+if test_config is None:
+# Load configuration from config.py
+app.config.from_pyfile('config.py', silent=True)
+else:
+app.config.from_mapping(test_config)
+
+from .models import db
+db.init_app(app)
+
+return app
+(tickets) $ mv ~/templates .
+(tickets) $ mv ~/static .
+import os
+
+from flask import Flask, redirect, render_template, url_for
+
+def create_app(test_config=None):
+app = Flask(__name__)
+app.config.from_mapping(
+SECRET_KEY=(os.getenv('SECRET_KEY') or 'dev'),
+)
+
+if test_config is None:
+# Load configuration from config.py
+app.config.from_pyfile('config.py', silent=True)
+else:
+app.config.from_mapping(test_config)
+
+from .models import db
+db.init_app(app)
+
+@app.route('/')
+def index():
+return redirect(url_for('tickets'))
+
+@app.route('/tickets')
+def tickets():
+return render_template('tickets_index.html')
+
+@app.route('/tickets/<int:ticket_id>')
+def tickets_show(ticket_id):
+return render_template('tickets_show.html')
+
+return app
+import os
+
+from flask import Flask, abort, redirect, render_template, url_for
+
+def create_app(test_config=None):
+app = Flask(__name__)
+app.config.from_mapping(
+SECRET_KEY=(os.getenv('SECRET_KEY') or 'dev'),
+)
+
+if test_config is None:
+# Load configuration from config.py
+app.config.from_pyfile('config.py', silent=True)
+else:
+app.config.from_mapping(test_config)
+
+from .models import db, Ticket
+db.init_app(app)
+
+from sqlalchemy.orm import exc
+
+@app.errorhandler(404)
+def page_not_found(e):
+return render_template('404.html'), 404
+
+@app.route('/')
+def index():
+return redirect(url_for('tickets'))
+
+@app.route('/tickets')
+def tickets():
+tickets = Ticket.query.all()
+return render_template('tickets_index.html', tickets=tickets)
+
+@app.route('/tickets/<int:ticket_id>')
+def tickets_show(ticket_id):
+try:
+ticket = Ticket.query.filter_by(id=ticket_id).one()
+return render_template('tickets_show.html', ticket=ticket)
+except exc.NoResultFound:
+abort(404)
+
+return app
+<!-- Contents above this comment were omitted -->
+<!-- EXAMPLE ROW, substitue the real information from the tickets in the database -->
+{% for ticket in tickets %}
+<tr>
+<th>{{ticket.id}}</th>
+<td>{{ticket.name}}</td>
+<td>{{ticket.status_string()}}</td>
+<td>
+<a href="{{ticket.url}}">{{ticket.url}}</a>
+</td>
+<td>
+<a href="{{url_for('tickets_show', ticket_id=ticket.id)}}">Details</a>
+</td>
+</tr>
+{% endfor %}
+<!-- Contens below this comment were omitted -->
+{% extends "layout.html" %}
+{% block title %}Ticket - {{ticket.name}}{% endblock %}
+
+{% block body %}
+<div class="content">
+<p><strong>Name:</strong> {{ticket.name}}</p>
+<p><strong>Status:</strong> {{ticket.status_string()}}</p>
+<p><strong>URL:</strong> <a href="{{ticket.url}}" target="_blank">{{ticket.url}}</a></p>
+</div>
+{% endblock %}
+import os
+
+from flask import Flask, abort, redirect, render_template, url_for, jsonify
+
+def create_app(test_config=None):
+app = Flask(__name__)
+app.config.from_mapping(
+SECRET_KEY=(os.getenv('SECRET_KEY') or 'dev'),
+)
+
+if test_config is None:
+# Load configuration from config.py
+app.config.from_pyfile('config.py', silent=True)
+else:
+app.config.from_mapping(test_config)
+
+from .models import db, Ticket
+db.init_app(app)
+
+from sqlalchemy.orm import exc
+
+@app.errorhandler(404)
+def page_not_found(e):
+return render_template('404.html'), 404
+
+@app.route('/')
+def index():
+return redirect(url_for('tickets'))
+
+@app.route('/tickets')
+def tickets():
+tickets = Ticket.query.all()
+return render_template('tickets_index.html', tickets=tickets)
+
+@app.route('/tickets/<int:ticket_id>')
+def tickets_show(ticket_id):
+try:
+ticket = Ticket.query.filter_by(id=ticket_id).one()
+return render_template('tickets_show.html', ticket=ticket)
+except exc.NoResultFound:
+abort(404)
+
+@app.route('/api/tickets')
+def api_tickets():
+tickets = Ticket.query.all()
+return jsonify(tickets)
+
+@app.route('/api/tickets/<int:ticket_id>')
+def api_tickets_show(ticket_id):
+try:
+ticket = Ticket.query.filter_by(id=ticket_id).one()
+return jsonify(ticket)
+except exc.NoResultFound:
+return jsonify({'error': 'Ticket not found'}), 404
+
+return app
+from flask_sqlalchemy import SQLAlchemy
+
+db = SQLAlchemy()
+
+class Ticket(db.Model):
+id = db.Column(db.Integer, primary_key=True)
+name = db.Column(db.String(100), nullable=False)
+status = db.Column(db.Integer, nullable=False)
+url = db.Column(db.String(100), nullable=True)
+
+statuses_dict = {
+0: 'Reported',
+1: 'In Progress',
+2: 'In Review',
+3: 'Resolved',
+}
+
+def status_string(self):
+return self.statuses_dict[self.status]
+
+def to_json(self):
+"""
+Return the JSON serializable format
+"""
+return {
+'id': self.id,
+'name': self.name,
+'status': self.status_string(),
+'url': self.url
+}
+# Extra code omitted
+
+@app.route('/api/tickets')
+def api_tickets():
+tickets = Ticket.query.all()
+return jsonify([ticket.to_json() for ticket in tickets])
+
+@app.route('/api/tickets/<int:ticket_id>')
+def api_tickets_show(ticket_id):
+try:
+ticket = Ticket.query.filter_by(id=ticket_id).one()
+return jsonify(ticket.to_json())
+except exc.NoResultFound:
+return jsonify({'error': 'Ticket not found'}), 404
+
+# Extra code omitted
